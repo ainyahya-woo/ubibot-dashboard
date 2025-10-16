@@ -103,24 +103,3 @@ def get_history():
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-```
-
-4. **Scroll bawah**, commit message: `Create app.py`
-
-5. Click **"Commit changes"** (button hijau)
-
----
-
-### **FILE 2: requirements.txt**
-
-1. **Balik ke main page** repo (click `ubibot-dashboard` atas)
-
-2. Click **"Add file"** → **"Create new file"**
-
-3. **Name your file**: Type `requirements.txt`
-
-4. **Paste ni:**
-```
-Flask==3.0.0
-requests==2.31.0
-gunicorn==21.2.0
