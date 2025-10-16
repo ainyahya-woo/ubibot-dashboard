@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UbiBot Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .update-time {
+            color: rgba(255,255,255,0.9);
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            background: white;
+            padding: 25px;
+            margin-bottom: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .metric {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            transition: transform 0.2s;
+        }
+        .metric:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .metric-label {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        .metric-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+        }
+        .charts {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        .chart-box {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .chart-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        canvas { max-height: 280px; }
+        .status-on { color: #4CAF50 !important; }
+        .status-off { color: #f44336 !important; }
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2em;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌱 UbiBot Monitoring Dashboard</h1>
+        <div class="update-time">Last updated: <span id="updateTime">Loading...</span></div>
+        
+        <!-- GS1 Sensor -->
+        <div class="section">
+            <h2>🌾 GS1 Agricultural Sensor</h2>
+            <div class="metrics" id="gs1Metrics">
+                <div class="metric">
+                    <div class="metric-label">🌡️ Temperature</div>
+                    <div class="metric-value">--°C</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">💧 Humidity</div>
+                    <div class="metric-value">--%</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">🌡️ Soil Temp</div>
+                    <div class="metric-value">--°C</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">💦 Soil Moisture</div>
+                    <div class="metric-value">--%</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">⚡ Soil EC</div>
+                    <div class="metric-value">--</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">🧪 Soil pH</div>
+                    <div class="metric-value">--</div>
+                </div>
+            </div>
+            
+            <div class="charts">
+                <div class="chart-box">
+                    <div class="chart-title">Temperature & Humidity</div>
+                    <canvas id="chart1"></canvas>
+                </div>
+                <div class="chart-box">
+                    <div class="chart-title">Soil Conditions</div>
+                    <canvas id="chart2"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Smart Plug -->
+        <div class="section">
+            <h2>🔌 Smart Plug Monitor</h2>
+            <div class="metrics" id="plugMetrics">
+                <div class="metric">
+                    <div class="metric-label">⚡ Status</div>
+                    <div class="metric-value" id="plugStatus">--</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">⚡ Voltage</div>
+                    <div class="metric-value">--V</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">⚡ Current</div>
+                    <div class="metric-value">--A</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">💡 Power</div>
+                    <div class="metric-value">--W</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">📊 Total Energy</div>
+                    <div class="metric-value">--kWh</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">🌫️ CO₂</div>
+                    <div class="metric-value">--ppm</div>
+                </div>
+            </div>
+            
+            <div class="charts">
+                <div class="chart-box">
+                    <div class="chart-title">Power Consumption</div>
+                    <canvas id="chart3"></canvas>
+                </div>
+                <div class="chart-box">
+                    <div class="chart-title">Voltage & Current</div>
+                    <canvas id="chart4"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let chart1, chart2, chart3, chart4;
+        
+        function initCharts() {
+            const chartConfig = {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: { legend: { display: true } }
+            };
+            
+            chart1 = new Chart(document.getElementById('chart1'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Temp (°C)', data: [], borderColor: '#ff6384', tension: 0.4, fill: false },
+                        { label: 'Humidity (%)', data: [], borderColor: '#36a2eb', tension: 0.4, fill: false }
+                    ]
+                },
+                options: chartConfig
+            });
+            
+            chart2 = new Chart(document.getElementById('chart2'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Soil Temp (°C)', data: [], borderColor: '#ff9f40', tension: 0.4, fill: false },
+                        { label: 'Soil Moisture (%)', data: [], borderColor: '#4bc0c0', tension: 0.4, fill: false }
+                    ]
+                },
+                options: chartConfig
+            });
+            
+            chart3 = new Chart(document.getElementById('chart3'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Power (W)', data: [], borderColor: '#9966ff', tension: 0.4, fill: true, backgroundColor: 'rgba(153, 102, 255, 0.2)' }
+                    ]
+                },
+                options: chartConfig
+            });
+            
+            chart4 = new Chart(document.getElementById('chart4'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Voltage (V)', data: [], borderColor: '#ff6384', tension: 0.4, fill: false },
+                        { label: 'Current (A)', data: [], borderColor: '#36a2eb', tension: 0.4, fill: false }
+                    ]
+                },
+                options: chartConfig
+            });
+        }
+        
+        async function fetchLatest() {
+            try {
+                const res = await fetch('/api/latest');
+                const data = await res.json();
+                
+                if (data.gs1_sensor) {
+                    const gs1 = data.gs1_sensor;
+                    const metrics = document.querySelectorAll('#gs1Metrics .metric-value');
+                    metrics[0].textContent = (gs1.temperature?.toFixed(1) || '--') + '°C';
+                    metrics[1].textContent = (gs1.humidity?.toFixed(1) || '--') + '%';
+                    metrics[2].textContent = (gs1.soil_temperature?.toFixed(1) || '--') + '°C';
+                    metrics[3].textContent = (gs1.soil_humidity?.toFixed(1) || '--') + '%';
+                    metrics[4].textContent = gs1.soil_ec?.toFixed(0) || '--';
+                    metrics[5].textContent = gs1.soil_ph?.toFixed(1) || '--';
+                }
+                
+                if (data.smart_plug) {
+                    const plug = data.smart_plug;
+                    const metrics = document.querySelectorAll('#plugMetrics .metric-value');
+                    const status = document.getElementById('plugStatus');
+                    status.textContent = plug.switch_status === 1 ? 'ON' : 'OFF';
+                    status.className = plug.switch_status === 1 ? 'metric-value status-on' : 'metric-value status-off';
+                    metrics[1].textContent = (plug.socket_voltage?.toFixed(1) || '--') + 'V';
+                    metrics[2].textContent = (plug.socket_current?.toFixed(2) || '--') + 'A';
+                    metrics[3].textContent = (plug.socket_power?.toFixed(1) || '--') + 'W';
+                    metrics[4].textContent = (plug.cumulative_electricity?.toFixed(2) || '--') + 'kWh';
+                    metrics[5].textContent = (plug.carbon_dioxide?.toFixed(0) || '--') + 'ppm';
+                }
+                
+                document.getElementById('updateTime').textContent = new Date().toLocaleString();
+            } catch (err) {
+                console.error('Error:', err);
+            }
+        }
+        
+        async function fetchHistory() {
+            try {
+                const res = await fetch('/api/history');
+                const data = await res.json();
+                
+                if (data.gs1_sensor?.length > 0) {
+                    const labels = data.gs1_sensor.map(d => new Date(d.timestamp).toLocaleTimeString()).reverse();
+                    chart1.data.labels = labels;
+                    chart1.data.datasets[0].data = data.gs1_sensor.map(d => d.temperature).reverse();
+                    chart1.data.datasets[1].data = data.gs1_sensor.map(d => d.humidity).reverse();
+                    chart1.update();
+                    
+                    chart2.data.labels = labels;
+                    chart2.data.datasets[0].data = data.gs1_sensor.map(d => d.soil_temperature).reverse();
+                    chart2.data.datasets[1].data = data.gs1_sensor.map(d => d.soil_humidity).reverse();
+                    chart2.update();
+                }
+                
+                if (data.smart_plug?.length > 0) {
+                    const labels = data.smart_plug.map(d => new Date(d.timestamp).toLocaleTimeString()).reverse();
+                    chart3.data.labels = labels;
+                    chart3.data.datasets[0].data = data.smart_plug.map(d => d.socket_power).reverse();
+                    chart3.update();
+                    
+                    chart4.data.labels = labels;
+                    chart4.data.datasets[0].data = data.smart_plug.map(d => d.socket_voltage).reverse();
+                    chart4.data.datasets[1].data = data.smart_plug.map(d => d.socket_current).reverse();
+                    chart4.update();
+                }
+            } catch (err) {
+                console.error('Error:', err);
+            }
+        }
+        
+        window.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            fetchLatest();
+            fetchHistory();
+            setInterval(() => {
+                fetchLatest();
+                fetchHistory();
+            }, 300000); // Refresh every 5 minutes
+        });
+    </script>
+</body>
+</html>
