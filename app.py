@@ -1,6 +1,7 @@
 from flask import Flask, render_template, jsonify
 import requests
 import os
+import json
 
 app = Flask(__name__)
 
@@ -17,29 +18,24 @@ def get_latest():
     result = {'gs1_sensor': None, 'smart_plug': None}
     
     try:
-        # Debug log
-        print(f"[DEBUG] Account Key exists: {bool(UBIBOT_ACCOUNT_KEY)}")
-        print(f"[DEBUG] Account Key length: {len(UBIBOT_ACCOUNT_KEY)}")
+        print(f"[DEBUG] Fetching channels...")
         
         # Call UbiBot Get Channels API
-        url = 'https://webapi.ubibot.com/channels?'
+        url = 'https://webapi.ubibot.com/channels'
         params = {'account_key': UBIBOT_ACCOUNT_KEY}
         
-        print(f"[DEBUG] Calling: {url}")
         response = requests.get(url, params=params, timeout=10)
-        
         print(f"[DEBUG] Status Code: {response.status_code}")
         
         if response.status_code != 200:
-            error_msg = f"UbiBot API Error: {response.status_code} - {response.text[:200]}"
+            error_msg = f"API Error: {response.status_code}"
             print(f"[ERROR] {error_msg}")
             return jsonify({'error': error_msg}), 500
         
         data = response.json()
-        print(f"[DEBUG] Response keys: {list(data.keys())}")
         
         if 'channels' not in data:
-            print(f"[ERROR] No 'channels' in response")
+            print(f"[ERROR] No channels in response")
             return jsonify({'error': 'No channels found'}), 500
         
         channels = data['channels']
@@ -48,13 +44,29 @@ def get_latest():
         for channel in channels:
             device_name = channel.get('name', '')
             device_name_lower = device_name.lower()
-            last_values = channel.get('last_values', {})
             
-            print(f"[DEBUG] Processing device: '{device_name}'")
+            print(f"[DEBUG] Device: '{device_name}'")
             
-            # Check for GS1 - exact match with your device name
+            # Get last_values - might be string or dict
+            last_values_raw = channel.get('last_values', {})
+            
+            # If it's a string, parse it as JSON
+            if isinstance(last_values_raw, str):
+                try:
+                    last_values = json.loads(last_values_raw)
+                    print(f"[DEBUG] Parsed last_values from JSON string")
+                except:
+                    print(f"[ERROR] Failed to parse last_values")
+                    last_values = {}
+            else:
+                last_values = last_values_raw
+            
+            print(f"[DEBUG] last_values type: {type(last_values)}")
+            print(f"[DEBUG] last_values keys: {list(last_values.keys()) if isinstance(last_values, dict) else 'N/A'}")
+            
+            # Match GS1
             if 'gs1' in device_name_lower:
-                print(f"[DEBUG] ✅ Matched GS1 Sensor")
+                print(f"[DEBUG] ✅ Matched GS1")
                 result['gs1_sensor'] = {
                     'temperature': last_values.get('field1'),
                     'humidity': last_values.get('field2'),
@@ -63,10 +75,10 @@ def get_latest():
                     'soil_ec': last_values.get('field5'),
                     'soil_ph': last_values.get('field6')
                 }
-                print(f"[DEBUG] GS1 Data: {result['gs1_sensor']}")
+                print(f"[DEBUG] GS1 temp: {last_values.get('field1')}")
             
-            # Check for Smart Plug - exact match with your device name
-            if 'smart plug' in device_name_lower or 'plug' in device_name_lower:
+            # Match Smart Plug
+            if 'plug' in device_name_lower:
                 print(f"[DEBUG] ✅ Matched Smart Plug")
                 result['smart_plug'] = {
                     'switch_status': last_values.get('field1', 0),
@@ -76,17 +88,17 @@ def get_latest():
                     'cumulative_electricity': last_values.get('field5'),
                     'carbon_dioxide': last_values.get('field6')
                 }
-                print(f"[DEBUG] Plug Data: {result['smart_plug']}")
+                print(f"[DEBUG] Plug power: {last_values.get('field4')}")
         
-        print(f"[DEBUG] Final result - GS1: {result['gs1_sensor'] is not None}, Plug: {result['smart_plug'] is not None}")
+        print(f"[DEBUG] Final - GS1: {result['gs1_sensor'] is not None}, Plug: {result['smart_plug'] is not None}")
         return jsonify(result)
     
     except Exception as e:
         import traceback
         error_detail = traceback.format_exc()
         print(f"[ERROR] Exception: {e}")
-        print(f"[ERROR] Traceback: {error_detail}")
-        return jsonify({'error': str(e), 'detail': error_detail}), 500
+        print(f"[ERROR] {error_detail}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/history')
 def get_history():
@@ -121,34 +133,45 @@ def get_history():
                     history_data = history_res.json()
                     
                     if 'feeds' in history_data:
-                        # GS1
-                        if 'gs1' in device_name:
-                            for feed in history_data['feeds'][:100]:
+                        feeds = history_data['feeds']
+                        
+                        # Process each feed
+                        for feed in feeds[:100]:
+                            # Parse values if they're strings
+                            values = feed.get('values', feed)
+                            if isinstance(values, str):
+                                try:
+                                    values = json.loads(values)
+                                except:
+                                    values = feed
+                            
+                            # GS1
+                            if 'gs1' in device_name:
                                 result['gs1_sensor'].append({
                                     'timestamp': feed.get('created_at'),
-                                    'temperature': feed.get('field1'),
-                                    'humidity': feed.get('field2'),
-                                    'soil_temperature': feed.get('field3'),
-                                    'soil_humidity': feed.get('field4')
+                                    'temperature': values.get('field1', feed.get('field1')),
+                                    'humidity': values.get('field2', feed.get('field2')),
+                                    'soil_temperature': values.get('field3', feed.get('field3')),
+                                    'soil_humidity': values.get('field4', feed.get('field4'))
                                 })
-                        
-                        # Smart Plug
-                        if 'plug' in device_name:
-                            for feed in history_data['feeds'][:100]:
+                            
+                            # Smart Plug
+                            if 'plug' in device_name:
                                 result['smart_plug'].append({
                                     'timestamp': feed.get('created_at'),
-                                    'socket_power': feed.get('field4'),
-                                    'socket_voltage': feed.get('field2'),
-                                    'socket_current': feed.get('field3')
+                                    'socket_power': values.get('field4', feed.get('field4')),
+                                    'socket_voltage': values.get('field2', feed.get('field2')),
+                                    'socket_current': values.get('field3', feed.get('field3'))
                                 })
         
         return jsonify(result)
     
     except Exception as e:
         print(f"[ERROR] History error: {e}")
+        import traceback
+        print(traceback.format_exc())
         return jsonify(result)
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-    
