@@ -44,7 +44,7 @@ def get_latest():
                     # Identify Smart Plug (check name contains 'plug' or 'socket')
                     elif 'plug' in device_name or 'socket' in device_name or 'sp1' in device_name:
                         result['smart_plug'] = {
-                            'switch_status': last_values.get('field1', 0),
+                            'switch_status': last_values.get('field1'),
                             'socket_voltage': last_values.get('field2'),
                             'socket_current': last_values.get('field3'),
                             'socket_power': last_values.get('field4'),
