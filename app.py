@@ -17,45 +17,76 @@ def get_latest():
     result = {'gs1_sensor': None, 'smart_plug': None}
     
     try:
-        # Call UbiBot Get Channels API - get ALL devices at once!
+        # Debug log
+        print(f"[DEBUG] Account Key exists: {bool(UBIBOT_ACCOUNT_KEY)}")
+        print(f"[DEBUG] Account Key length: {len(UBIBOT_ACCOUNT_KEY)}")
+        
+        # Call UbiBot Get Channels API
         url = 'https://webapi.ubibot.com/channels'
         params = {'account_key': UBIBOT_ACCOUNT_KEY}
+        
+        print(f"[DEBUG] Calling: {url}")
         response = requests.get(url, params=params, timeout=10)
         
-        if response.status_code == 200:
-            data = response.json()
-            
-            if 'channels' in data:
-                for channel in data['channels']:
-                    device_name = channel.get('name', '').lower()
-                    last_values = channel.get('last_values', {})
-                    
-                    # Identify GS1 sensor (check name contains 'gs1' or 'agricultural')
-                    if 'gs1' in device_name or 'agricultural' in device_name or 'sensor' in device_name:
-                        result['gs1_sensor'] = {
-                            'temperature': last_values.get('field1'),
-                            'humidity': last_values.get('field2'),
-                            'soil_temperature': last_values.get('field3'),
-                            'soil_humidity': last_values.get('field4'),
-                            'soil_ec': last_values.get('field5'),
-                            'soil_ph': last_values.get('field6')
-                        }
-                    
-                    # Identify Smart Plug (check name contains 'plug' or 'socket')
-                    elif 'plug' in device_name or 'socket' in device_name or 'sp1' in device_name:
-                        result['smart_plug'] = {
-                            'switch_status': last_values.get('field1', 0),
-                            'socket_voltage': last_values.get('field2'),
-                            'socket_current': last_values.get('field3'),
-                            'socket_power': last_values.get('field4'),
-                            'cumulative_electricity': last_values.get('field5'),
-                            'carbon_dioxide': last_values.get('field6')
-                        }
+        print(f"[DEBUG] Status Code: {response.status_code}")
         
+        if response.status_code != 200:
+            error_msg = f"UbiBot API Error: {response.status_code} - {response.text[:200]}"
+            print(f"[ERROR] {error_msg}")
+            return jsonify({'error': error_msg}), 500
+        
+        data = response.json()
+        print(f"[DEBUG] Response keys: {list(data.keys())}")
+        
+        if 'channels' not in data:
+            print(f"[ERROR] No 'channels' in response")
+            return jsonify({'error': 'No channels found'}), 500
+        
+        channels = data['channels']
+        print(f"[DEBUG] Found {len(channels)} channels")
+        
+        for channel in channels:
+            device_name = channel.get('name', '')
+            device_name_lower = device_name.lower()
+            last_values = channel.get('last_values', {})
+            
+            print(f"[DEBUG] Processing device: '{device_name}'")
+            
+            # Check for GS1 - exact match with your device name
+            if 'gs1' in device_name_lower:
+                print(f"[DEBUG] ✅ Matched GS1 Sensor")
+                result['gs1_sensor'] = {
+                    'temperature': last_values.get('field1'),
+                    'humidity': last_values.get('field2'),
+                    'soil_temperature': last_values.get('field3'),
+                    'soil_humidity': last_values.get('field4'),
+                    'soil_ec': last_values.get('field5'),
+                    'soil_ph': last_values.get('field6')
+                }
+                print(f"[DEBUG] GS1 Data: {result['gs1_sensor']}")
+            
+            # Check for Smart Plug - exact match with your device name
+            if 'smart plug' in device_name_lower or 'plug' in device_name_lower:
+                print(f"[DEBUG] ✅ Matched Smart Plug")
+                result['smart_plug'] = {
+                    'switch_status': last_values.get('field1', 0),
+                    'socket_voltage': last_values.get('field2'),
+                    'socket_current': last_values.get('field3'),
+                    'socket_power': last_values.get('field4'),
+                    'cumulative_electricity': last_values.get('field5'),
+                    'carbon_dioxide': last_values.get('field6')
+                }
+                print(f"[DEBUG] Plug Data: {result['smart_plug']}")
+        
+        print(f"[DEBUG] Final result - GS1: {result['gs1_sensor'] is not None}, Plug: {result['smart_plug'] is not None}")
         return jsonify(result)
     
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"[ERROR] Exception: {e}")
+        print(f"[ERROR] Traceback: {error_detail}")
+        return jsonify({'error': str(e), 'detail': error_detail}), 500
 
 @app.route('/api/history')
 def get_history():
@@ -63,56 +94,61 @@ def get_history():
     result = {'gs1_sensor': [], 'smart_plug': []}
     
     try:
-        # Get all channels first to identify channel IDs
+        # Get all channels
         channels_url = 'https://webapi.ubibot.com/channels'
         channels_params = {'account_key': UBIBOT_ACCOUNT_KEY}
         channels_res = requests.get(channels_url, params=channels_params, timeout=10)
         
-        if channels_res.status_code == 200:
-            channels_data = channels_res.json()
-            
-            if 'channels' in channels_data:
-                for channel in channels_data['channels']:
-                    channel_id = channel.get('channel_id')
-                    device_name = channel.get('name', '').lower()
+        if channels_res.status_code != 200:
+            return jsonify(result)
+        
+        channels_data = channels_res.json()
+        
+        if 'channels' in channels_data:
+            for channel in channels_data['channels']:
+                channel_id = channel.get('channel_id')
+                device_name = channel.get('name', '').lower()
+                
+                # Get historical data
+                history_url = f'https://webapi.ubibot.com/channels/{channel_id}/data'
+                history_params = {
+                    'account_key': UBIBOT_ACCOUNT_KEY,
+                    'results': 100
+                }
+                history_res = requests.get(history_url, params=history_params, timeout=10)
+                
+                if history_res.status_code == 200:
+                    history_data = history_res.json()
                     
-                    # Get historical data for each channel
-                    history_url = f'https://webapi.ubibot.com/channels/{channel_id}/data'
-                    history_params = {
-                        'account_key': UBIBOT_ACCOUNT_KEY,
-                        'results': 100
-                    }
-                    history_res = requests.get(history_url, params=history_params, timeout=10)
-                    
-                    if history_res.status_code == 200:
-                        history_data = history_res.json()
+                    if 'feeds' in history_data:
+                        # GS1
+                        if 'gs1' in device_name:
+                            for feed in history_data['feeds'][:100]:
+                                result['gs1_sensor'].append({
+                                    'timestamp': feed.get('created_at'),
+                                    'temperature': feed.get('field1'),
+                                    'humidity': feed.get('field2'),
+                                    'soil_temperature': feed.get('field3'),
+                                    'soil_humidity': feed.get('field4')
+                                })
                         
-                        if 'feeds' in history_data:
-                            # Check if GS1 or Smart Plug
-                            if 'gs1' in device_name or 'agricultural' in device_name or 'sensor' in device_name:
-                                for feed in history_data['feeds'][:100]:
-                                    result['gs1_sensor'].append({
-                                        'timestamp': feed.get('created_at'),
-                                        'temperature': feed.get('field1'),
-                                        'humidity': feed.get('field2'),
-                                        'soil_temperature': feed.get('field3'),
-                                        'soil_humidity': feed.get('field4')
-                                    })
-                            
-                            elif 'plug' in device_name or 'socket' in device_name or 'sp1' in device_name:
-                                for feed in history_data['feeds'][:100]:
-                                    result['smart_plug'].append({
-                                        'timestamp': feed.get('created_at'),
-                                        'socket_power': feed.get('field4'),
-                                        'socket_voltage': feed.get('field2'),
-                                        'socket_current': feed.get('field3')
-                                    })
+                        # Smart Plug
+                        if 'plug' in device_name:
+                            for feed in history_data['feeds'][:100]:
+                                result['smart_plug'].append({
+                                    'timestamp': feed.get('created_at'),
+                                    'socket_power': feed.get('field4'),
+                                    'socket_voltage': feed.get('field2'),
+                                    'socket_current': feed.get('field3')
+                                })
         
         return jsonify(result)
     
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"[ERROR] History error: {e}")
+        return jsonify(result)
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+    
