@@ -22,7 +22,7 @@ def get_latest():
         print(f"[DEBUG] Account Key length: {len(UBIBOT_ACCOUNT_KEY)}")
         
         # Call UbiBot Get Channels API
-        url = 'https://webapi.ubibot.com/channels'
+        url = 'https://webapi.ubibot.com/channels?'
         params = {'account_key': UBIBOT_ACCOUNT_KEY}
         
         print(f"[DEBUG] Calling: {url}")
